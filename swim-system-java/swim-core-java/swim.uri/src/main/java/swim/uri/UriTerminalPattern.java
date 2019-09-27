@@ -35,6 +35,15 @@ abstract class UriTerminalPattern extends UriFragmentPattern {
     }
   }
 
+  @Override
+  boolean matchesPrefix(UriFragment fragment) {
+    if (!fragment.isDefined()) {
+      return matches();
+    } else {
+      return false;
+    }
+  }
+
   static UriTerminalPattern compile(Uri pattern) {
     return new UriConstantPattern(pattern);
   }

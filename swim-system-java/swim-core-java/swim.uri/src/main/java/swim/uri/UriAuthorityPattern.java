@@ -39,6 +39,17 @@ abstract class UriAuthorityPattern extends UriSchemePattern {
     }
   }
 
+  abstract boolean matchesPrefix(UriAuthority authority, UriPath path, UriQuery query, UriFragment fragment);
+
+  @Override
+  boolean matchesPrefix(UriScheme scheme, UriAuthority authority, UriPath path, UriQuery query, UriFragment fragment) {
+    if (!scheme.isDefined()) {
+      return matchesPrefix(authority, path, query, fragment);
+    } else {
+      return false;
+    }
+  }
+
   static UriAuthorityPattern compile(Uri pattern, UriAuthority authority, UriPath path,
                                      UriQuery query, UriFragment fragment) {
     if (authority.isDefined()) {

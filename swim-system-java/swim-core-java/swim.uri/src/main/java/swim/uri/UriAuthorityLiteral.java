@@ -58,4 +58,13 @@ final class UriAuthorityLiteral extends UriAuthorityPattern {
       return false;
     }
   }
+
+  @Override
+  boolean matchesPrefix(UriAuthority authority, UriPath path, UriQuery query, UriFragment fragment) {
+    if (this.authority.equals(authority)) {
+      return this.rest.matchesPrefix(path, query, fragment);
+    } else {
+      return false;
+    }
+  }
 }

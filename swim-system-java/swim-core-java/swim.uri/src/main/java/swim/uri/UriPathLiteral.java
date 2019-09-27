@@ -59,4 +59,16 @@ final class UriPathLiteral extends UriPathPattern {
       return false;
     }
   }
+
+  @Override
+  boolean matchesPrefix(UriPath path, UriQuery query, UriFragment fragment) {
+    if (!path.isEmpty() && this.component.equals(path.head())) {
+      if (this.rest instanceof UriTerminalPattern) {
+        return true;
+      }
+      return this.rest.matchesPrefix(path.tail(), query, fragment);
+    } else {
+      return false;
+    }
+  }
 }
