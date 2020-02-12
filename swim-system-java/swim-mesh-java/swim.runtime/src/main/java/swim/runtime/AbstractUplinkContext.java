@@ -31,7 +31,7 @@ import swim.uri.Uri;
 public abstract class AbstractUplinkContext implements LinkContext, Uplink {
 
 
-  protected volatile LaneObserver observers; // Observer | Observer[]
+  protected volatile LaneObserver observers;
 
   public abstract LaneBinding laneBinding();
 

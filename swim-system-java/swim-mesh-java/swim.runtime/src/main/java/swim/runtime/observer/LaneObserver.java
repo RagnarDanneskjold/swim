@@ -60,7 +60,6 @@ import swim.api.warp.function.WillSync;
 import swim.api.warp.function.WillUnlink;
 import swim.api.warp.function.WillUplink;
 import swim.codec.Decoder;
-import swim.collections.HashTrieMap;
 import swim.concurrent.Conts;
 import swim.http.HttpRequest;
 import swim.http.HttpResponse;
@@ -92,18 +91,16 @@ import swim.warp.SyncedResponse;
 import swim.warp.UnlinkRequest;
 import swim.warp.UnlinkedResponse;
 import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 public final class LaneObserver {
 
-  @SuppressWarnings("rawtypes")
-  private static final AtomicReferenceFieldUpdater<LaneObserver, HashTrieMap> OBSERVERS =
-      AtomicReferenceFieldUpdater.newUpdater(LaneObserver.class, HashTrieMap.class, "observers");
-  private volatile HashTrieMap<Class<?>, List<Observer>> observers = HashTrieMap.empty();
+  static final AtomicReferenceFieldUpdater<LaneObserver, Observer[]> OBSERVERS =
+      AtomicReferenceFieldUpdater.newUpdater(LaneObserver.class, Observer[].class, "observers");
+
+  private volatile Observer[] observers = new Observer[0];
   private final Lane lane;
 
   public LaneObserver() {
@@ -114,81 +111,59 @@ public final class LaneObserver {
     this.lane = lane;
   }
 
-  private static List<Class<?>> getObserverInterfaces(final Observer observer) {
-    final List<Class<?>> interfaces = new ArrayList<>();
-    Class<?> clazz = observer.getClass();
 
-    while (clazz != Object.class) {
-      for (final Class<?> intf : clazz.getInterfaces()) {
-        if (Observer.class.isAssignableFrom(intf)) {
-          interfaces.add(intf);
-        }
-      }
-
-      clazz = clazz.getSuperclass();
-    }
-
-    return interfaces;
-  }
-
-  @SuppressWarnings("DuplicatedCode")
   public void unobserve(final Observer oldObserver) {
     if (oldObserver == null) {
       return;
     }
 
-    final List<Class<?>> interfaces = getObserverInterfaces(oldObserver);
-    HashTrieMap<Class<?>, List<Observer>> oldMap;
-    HashTrieMap<Class<?>, List<Observer>> newMap;
-
     do {
-      oldMap = observers;
-      newMap = observers;
+      final Observer[] newObservers;
+      final Observer[] oldObservers = this.observers;
+      final int oldCount = oldObservers.length;
 
-      for (Class<?> c : interfaces) {
-        if (newMap.containsKey(c)) {
-          List<Observer> observers = newMap.get(c);
-          List<Observer> newObservers = new ArrayList<>(observers);
-
-          newObservers.remove(oldObserver);
-          if (newObservers.size() == 0) {
-            newMap = newMap.removed(c);
-          } else {
-            newMap = newMap.updated(c, newObservers);
-          }
+      int i = 0;
+      while (i < oldCount) {
+        if (oldObservers[i] == oldObserver) {
+          break;
         }
+        i += 1;
       }
-    } while (!OBSERVERS.compareAndSet(this, oldMap, newMap));
+      if (i < oldCount) {
+        final Observer[] newArray = new Observer[oldCount - 1];
+        System.arraycopy(oldObservers, 0, newArray, 0, i);
+        System.arraycopy(oldObservers, i + 1, newArray, i, oldCount - 1 - i);
+        newObservers = newArray;
+      } else {
+        break;
+      }
+
+      if (OBSERVERS.compareAndSet(this, oldObservers, newObservers)) {
+        break;
+      }
+    } while (true);
   }
 
-  @SuppressWarnings("DuplicatedCode")
   public void observe(final Observer newObserver) {
     if (newObserver == null) {
-      return;
+      throw new NullPointerException();
     }
 
-    final List<Class<?>> interfaces = getObserverInterfaces(newObserver);
-    HashTrieMap<Class<?>, List<Observer>> oldMap;
-    HashTrieMap<Class<?>, List<Observer>> newMap;
-
     do {
-      oldMap = observers;
-      newMap = observers;
+      final Observer[] newObservers;
+      final Observer[] oldObservers = this.observers;
+      final Observer[] oldArray = this.observers;
+      final int oldCount = oldArray.length;
+      final Observer[] newArray = new Observer[oldCount + 1];
 
-      for (Class<?> c : interfaces) {
-        if (newMap.containsKey(c)) {
-          List<Observer> observers = newMap.get(c);
-          List<Observer> newObservers = new ArrayList<>(observers);
+      System.arraycopy(oldArray, 0, newArray, 0, oldCount);
+      newArray[oldCount] = newObserver;
+      newObservers = newArray;
 
-          newObservers.add(newObserver);
-          newMap = newMap.updated(c, newObservers);
-        } else {
-          List<Observer> newObservers = new ArrayList<>();
-          newObservers.add(newObserver);
-          newMap = newMap.updated(c, newObservers);
-        }
+      if (OBSERVERS.compareAndSet(this, oldObservers, newObservers)) {
+        break;
       }
-    } while (!OBSERVERS.compareAndSet(this, oldMap, newMap));
+    } while (true);
   }
 
   public void laneDidFail(final Throwable error) {
@@ -390,8 +365,8 @@ public final class LaneObserver {
   private <T extends Observer, R> DispatchResult<R> dispatch(final Link link, final Boolean preemptive,
                                                              final Class<T> observerType, final Dispatcher<R> dispatcher) {
     DispatchResult<R> dispatchResult = null;
-    if (this.observers.containsKey(observerType)) {
-      for (Observer o : this.observers.get(observerType)) {
+    for (Observer o : this.observers) {
+      if (observerType.isAssignableFrom(o.getClass())) {
         final Lane oldLane = SwimContext.getLane();
         final Link oldLink = SwimContext.getLink();
 
@@ -440,8 +415,8 @@ public final class LaneObserver {
                                                     final Class<T> observerType, final VoidDispatcher dispatcher) {
     boolean complete = true;
 
-    if (this.observers.containsKey(observerType)) {
-      for (Observer o : this.observers.get(observerType)) {
+    for (Observer o : this.observers) {
+      if (observerType.isAssignableFrom(o.getClass())) {
         final Lane oldLane = SwimContext.getLane();
         final Link oldLink = SwimContext.getLink();
 
